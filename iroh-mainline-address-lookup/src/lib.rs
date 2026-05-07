@@ -4,7 +4,7 @@
 //! relay servers as well as the Mainline DHT directly.  See the [pkarr module] for an
 //! overview of pkarr.
 //!
-//! [pkarr module]: super
+//! [pkarr module]: iroh_dns::pkarr
 use std::sync::{Arc, Mutex};
 
 use iroh::{
@@ -77,9 +77,9 @@ fn mutable_item_to_signed_packet(
 /// This can be useful to enable publishing IP addresses if the iroh endpoint is reachable via public
 /// IP addresses.
 ///
-/// [pkarr module]: super
-/// [`AddrFilter::relay_only`]: crate::address_lookup::AddrFilter::relay_only
-/// [`AddrFilter::unfiltered`]: crate::address_lookup::AddrFilter::unfiltered
+/// [pkarr module]: iroh_dns::pkarr
+/// [`AddrFilter::relay_only`]: iroh::address_lookup::AddrFilter::relay_only
+/// [`AddrFilter::unfiltered`]: iroh::address_lookup::AddrFilter::unfiltered
 #[derive(Debug, Clone)]
 pub struct DhtAddressLookup(Arc<Inner>);
 

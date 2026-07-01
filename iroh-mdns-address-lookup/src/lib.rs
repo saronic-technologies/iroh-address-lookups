@@ -54,7 +54,7 @@
 //! [`AddrFilter`]: iroh::address_lookup::AddrFilter
 //! [`RelayUrl`]: iroh_base::RelayUrl
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::Arc,
@@ -75,7 +75,7 @@ use n0_future::{
     time::{self, Duration},
 };
 use n0_watcher::{Watchable, Watcher as _};
-use swarm_discovery::{Discoverer, DropGuard, IpClass, Peer};
+use swarm_discovery::{Discoverer, DropGuard, IpClass, Peer, utilities::if_nametoindex};
 use tokio::sync::mpsc::{self, error::TrySendError};
 use tracing::{Instrument, debug, error, info_span, trace, warn};
 
@@ -103,6 +103,8 @@ const RELAY_URL_ATTRIBUTE: &str = "relay";
 pub struct MdnsAddressLookup {
     #[allow(dead_code)]
     handle: Arc<AbortOnDropHandle<()>>,
+    #[allow(dead_code)]
+    interface_watcher_handle: Arc<AbortOnDropHandle<()>>,
     sender: mpsc::Sender<Message>,
     advertise: bool,
     /// When `local_addrs` changes, we re-publish our info.
@@ -285,10 +287,15 @@ impl MdnsAddressLookup {
             &rt,
         )?;
 
+        let interface_watcher_handle = task::spawn(
+            Self::spawn_interface_watcher(Arc::clone(&address_lookup))
+                .instrument(info_span!("swarm-discovery.multi-interface.actor")),
+        );
+
         let local_addrs: Watchable<Option<EndpointData>> = Watchable::default();
         let mut addrs_change = local_addrs.watch();
         let address_lookup_fut = async move {
-            let mut endpoint_addrs: HashMap<PublicKey, Peer> = HashMap::default();
+            let mut endpoint_addrs: HashMap<PublicKey, AddressLookupItem> = HashMap::default();
             let mut subscribers = Subscribers::new();
             let mut last_id = 0;
             let mut senders: HashMap<
@@ -371,11 +378,13 @@ impl MdnsAddressLookup {
                             continue;
                         }
 
-                        let entry = endpoint_addrs.entry(discovered_endpoint_id);
-                        if let std::collections::hash_map::Entry::Occupied(ref entry) = entry
-                            && entry.get() == &peer_info
+                        let item = peer_to_discovery_item(&peer_info, &discovered_endpoint_id);
+                        if let Some(existing) = endpoint_addrs.get(&discovered_endpoint_id)
+                            && existing.endpoint_info().data == item.endpoint_info().data
                         {
-                            // this is a republish we already know about
+                            // A republish or a loopback/multi-interface duplicate of an
+                            // endpoint we already know about; the addresses and TXT data are
+                            // unchanged, so don't re-notify subscribers.
                             continue;
                         }
 
@@ -386,7 +395,6 @@ impl MdnsAddressLookup {
                         );
 
                         let mut resolved = false;
-                        let item = peer_to_discovery_item(&peer_info, &discovered_endpoint_id);
                         if let Some(senders) = senders.get(&discovered_endpoint_id) {
                             trace!(?item, senders = senders.len(), "sending AddressLookupItem");
                             resolved = true;
@@ -394,7 +402,7 @@ impl MdnsAddressLookup {
                                 sender.send(Ok(item.clone())).await.ok();
                             }
                         }
-                        entry.or_insert(peer_info);
+                        endpoint_addrs.insert(discovered_endpoint_id, item.clone());
 
                         // only send endpoints to the `subscriber` if they weren't explicitly resolved
                         // in other words, endpoints sent to the `subscribers` should only be the ones that
@@ -410,10 +418,9 @@ impl MdnsAddressLookup {
                         let id = last_id + 1;
                         last_id = id;
                         trace!(?endpoint_id, "Mdns Message::SendAddrs");
-                        if let Some(peer_info) = endpoint_addrs.get(&endpoint_id) {
-                            let item = peer_to_discovery_item(peer_info, &endpoint_id);
+                        if let Some(item) = endpoint_addrs.get(&endpoint_id) {
                             debug!(?item, "sending AddressLookupItem");
-                            sender.send(Ok(item)).await.ok();
+                            sender.send(Ok(item.clone())).await.ok();
                         }
                         if let Some(senders_for_endpoint_id) = senders.get_mut(&endpoint_id) {
                             senders_for_endpoint_id.insert(id, sender);
@@ -452,6 +459,7 @@ impl MdnsAddressLookup {
             task::spawn(address_lookup_fut.instrument(info_span!("swarm-discovery.actor")));
         Ok(Self {
             handle: Arc::new(AbortOnDropHandle::new(handle)),
+            interface_watcher_handle: Arc::new(AbortOnDropHandle::new(interface_watcher_handle)),
             sender: send,
             advertise,
             local_addrs,
@@ -476,7 +484,7 @@ impl MdnsAddressLookup {
         socketaddrs: BTreeSet<SocketAddr>,
         service_name: String,
         rt: &tokio::runtime::Handle,
-    ) -> Result<DropGuard, AddressLookupBuilderError> {
+    ) -> Result<Arc<DropGuard>, AddressLookupBuilderError> {
         let spawn_rt = rt.clone();
         let callback = move |endpoint_id: &str, peer: &Peer| {
             trace!(endpoint_id, ?peer, "Received peer information from Mdns");
@@ -503,9 +511,76 @@ impl MdnsAddressLookup {
                 discoverer = discoverer.with_addrs(addr.0, addr.1);
             }
         }
-        discoverer
-            .spawn(rt)
-            .map_err(|e| AddressLookupBuilderError::from_err("mdns", e))
+
+        // Spawn discoverer
+        Ok(Arc::new(discoverer.spawn(rt).map_err(|e| {
+            AddressLookupBuilderError::from_err("mdns", e)
+        })?))
+    }
+
+    /// Keeps the discoverer's set of IPv4 multicast interfaces in sync with the
+    /// host's network interfaces.
+    ///
+    /// Reacts to netwatch's interface monitor instead of polling, mirroring the
+    /// `Watchable` pattern used for `local_addrs`. Each added interface's index is
+    /// cached so it can be removed later: once an interface disappears from the OS,
+    /// `if_nametoindex` can no longer resolve its name to an index.
+    async fn spawn_interface_watcher(guard: Arc<DropGuard>) {
+        let monitor = match netwatch::netmon::Monitor::new().await {
+            Ok(monitor) => monitor,
+            Err(err) => {
+                warn!("network monitor unavailable, multi-interface disabled: {err:?}");
+                return;
+            }
+        };
+        let mut interface_state = monitor.interface_state();
+        // Interfaces we've registered, keyed by name -> interface index.
+        let mut known: HashMap<String, u32> = HashMap::new();
+
+        loop {
+            let current = v4_multicast_interfaces();
+            debug!(?known, ?current, "updating mDNS interfaces");
+
+            // Add interfaces that appeared.
+            for name in &current {
+                // Ignore interfaces we already know about
+                if known.contains_key(name) {
+                    continue;
+                }
+
+                // We don't know about this interface, so we need to add it
+                match if_nametoindex(name) {
+                    Ok(ifindex) => {
+                        debug!(%name, ifindex, "adding multicast interface");
+                        guard.add_interface_v4(ifindex);
+                        known.insert(name.clone(), ifindex);
+                    }
+                    Err(err) => trace!(%name, "could not resolve interface index: {err}"),
+                }
+            }
+
+            // Remove interfaces that disappeared, using the cached index since the
+            // name can no longer be resolved once the interface is gone.
+            known.retain(|name, ifindex| {
+                if current.contains(name) {
+                    return true;
+                }
+                debug!(%name, ifindex, "removing multicast interface");
+                guard.remove_interface_v4(*ifindex);
+                false
+            });
+
+            // Wait for the next network change instead of polling.
+            let updated = interface_state.updated().await;
+            match updated {
+                Ok(state) => debug!(%state, "interface state changed"),
+                Err(e) => {
+                    error!("could not get updated interface state due to error: {e}");
+
+                    break;
+                }
+            }
+        }
     }
 
     fn socketaddrs_to_addrs<'a>(
@@ -520,6 +595,28 @@ impl MdnsAddressLookup {
         }
         addrs
     }
+}
+
+/// Returns the names of interfaces suitable for IPv4 mDNS multicast.
+///
+/// We register an interface only if it is up, multicast-capable, has an IPv4
+/// address, and is neither loopback nor point-to-point. Point-to-point links
+/// (VPN/tunnel devices such as WireGuard) often advertise the multicast flag but
+/// fail to actually join a group, and sending on every such interface multiplies
+/// the multicast traffic for no benefit. The discoverer only supports
+/// per-interface multicast for IPv4; IPv6 always uses the default interface.
+fn v4_multicast_interfaces() -> HashSet<String> {
+    netdev::get_interfaces()
+        .into_iter()
+        .filter(|iface| {
+            iface.is_up()
+                && iface.is_multicast()
+                && !iface.is_loopback()
+                && !iface.is_point_to_point()
+                && !iface.ipv4.is_empty()
+        })
+        .map(|iface| iface.name)
+        .collect()
 }
 
 fn peer_to_discovery_item(peer: &Peer, endpoint_id: &EndpointId) -> AddressLookupItem {
@@ -757,18 +854,21 @@ mod tests {
             let test = async move {
                 let mut got_ids = BTreeSet::new();
                 while got_ids.len() != num_endpoints {
-                    if let Some(DiscoveryEvent::Discovered { endpoint_info, .. }) =
-                        events.next().await
-                    {
-                        let data = endpoint_info.data.user_data().cloned();
-                        if endpoint_ids.contains(&(endpoint_info.endpoint_id, data.clone())) {
-                            got_ids.insert((endpoint_info.endpoint_id, data));
+                    match events.next().await {
+                        Some(DiscoveryEvent::Discovered { endpoint_info, .. }) => {
+                            let data = endpoint_info.data.user_data().cloned();
+                            if endpoint_ids.contains(&(endpoint_info.endpoint_id, data.clone())) {
+                                got_ids.insert((endpoint_info.endpoint_id, data));
+                            }
                         }
-                    } else {
-                        bail_any!(
+                        // A peer may briefly expire and re-announce (best-effort multicast,
+                        // more so across multiple interfaces); ignore non-Discovered events
+                        // and keep waiting rather than treating them as fatal.
+                        Some(_) => continue,
+                        None => bail_any!(
                             "no more events, only got {} ids, expected {num_endpoints}\n",
                             got_ids.len()
-                        );
+                        ),
                     }
                 }
                 assert_eq!(got_ids, endpoint_ids);

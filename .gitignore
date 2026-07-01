@@ -1,2 +1,7 @@
 /target
 .vscode/settings.json
+
+# Nix
+/result
+/result-*
+.direnv/

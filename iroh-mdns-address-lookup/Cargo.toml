@@ -29,7 +29,7 @@ n0-future = "0.3.2"
 n0-watcher = "1"
 netdev = "0.45"
 netwatch = { git = "https://github.com/saronic-technologies/net-tools", rev = "0015d85c818ce15204b31cc464af0a20d064cbb3" }
-swarm-discovery = { git = "https://github.com/saronic-technologies/swarm-discovery", rev = "1b996e7764a8f84f5e2403a20650df6f0387360d" }
+swarm-discovery = { git = "https://github.com/saronic-technologies/swarm-discovery", rev = "e88a952ff92583e96f821b8f1f1812e178886f3e" }
 tokio = { version = "1.49", features = ["rt", "sync"] }
 tokio-stream = { version = "0.1.15", features = ["sync"] }
 tracing = "0.1.44"

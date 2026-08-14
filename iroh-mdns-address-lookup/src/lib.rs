@@ -54,7 +54,7 @@
 //! [`AddrFilter`]: iroh::address_lookup::AddrFilter
 //! [`RelayUrl`]: iroh_base::RelayUrl
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashMap},
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::Arc,
@@ -75,7 +75,7 @@ use n0_future::{
     time::{self, Duration},
 };
 use n0_watcher::{Watchable, Watcher as _};
-use swarm_discovery::{Discoverer, DropGuard, IpClass, Peer, utilities::if_nametoindex};
+use swarm_discovery::{Discoverer, DropGuard, IpClass, Peer};
 use tokio::sync::mpsc::{self, error::TrySendError};
 use tracing::{Instrument, debug, error, info_span, trace, warn};
 
@@ -98,6 +98,21 @@ const LOOKUP_DURATION: Duration = Duration::from_secs(10);
 /// the TXT record supported by swarm-discovery.
 const RELAY_URL_ATTRIBUTE: &str = "relay";
 
+/// An interface the mDNS service is actively advertising on.
+///
+/// See [`MdnsAddressLookup::multicast_interfaces`].
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MulticastInterface {
+    /// OS-assigned interface index.
+    pub index: u32,
+    /// Interface name as reported by the OS enumeration.
+    ///
+    /// `None` in the rare case that the interface disappeared from the OS
+    /// after its multicast socket was registered but before its removal
+    /// propagated through the discoverer.
+    pub name: Option<String>,
+}
+
 /// Address Lookup using `swarm-discovery`, a variation on mdns.
 #[derive(Debug, Clone)]
 pub struct MdnsAddressLookup {
@@ -109,6 +124,9 @@ pub struct MdnsAddressLookup {
     advertise: bool,
     /// When `local_addrs` changes, we re-publish our info.
     local_addrs: Watchable<Option<EndpointData>>,
+    /// Interfaces the discoverer is actively advertising on, kept up to
+    /// date by the interface watcher.
+    active_interfaces: Watchable<Vec<MulticastInterface>>,
 }
 
 #[derive(Debug)]
@@ -287,8 +305,9 @@ impl MdnsAddressLookup {
             &rt,
         )?;
 
+        let active_interfaces: Watchable<Vec<MulticastInterface>> = Watchable::default();
         let interface_watcher_handle = task::spawn(
-            Self::spawn_interface_watcher(Arc::clone(&address_lookup))
+            Self::spawn_interface_watcher(Arc::clone(&address_lookup), active_interfaces.clone())
                 .instrument(info_span!("swarm-discovery.multi-interface.actor")),
         );
 
@@ -463,7 +482,23 @@ impl MdnsAddressLookup {
             sender: send,
             advertise,
             local_addrs,
+            active_interfaces,
         })
+    }
+
+    /// Returns a [`Watcher`](n0_watcher::Watcher) over the interfaces this
+    /// service is actively advertising on via per-interface IPv4 multicast.
+    ///
+    /// The list reflects what the underlying discoverer actually achieved,
+    /// not what was requested: an interface appears only once its multicast
+    /// socket was created and the group joined, and interfaces that failed
+    /// registration never show up. It is empty while per-interface multicast
+    /// is not in use (e.g. no suitable interfaces, or the network monitor is
+    /// unavailable) — mDNS then still runs on the OS default interface.
+    ///
+    /// Entries are sorted by interface index.
+    pub fn multicast_interfaces(&self) -> n0_watcher::Direct<Vec<MulticastInterface>> {
+        self.active_interfaces.watch()
     }
 
     /// Subscribe to discovered endpoints.
@@ -519,13 +554,23 @@ impl MdnsAddressLookup {
     }
 
     /// Keeps the discoverer's set of IPv4 multicast interfaces in sync with the
-    /// host's network interfaces.
+    /// host's network interfaces, and publishes the actively advertising set
+    /// to `active_interfaces`.
     ///
     /// Reacts to netwatch's interface monitor instead of polling, mirroring the
-    /// `Watchable` pattern used for `local_addrs`. Each added interface's index is
-    /// cached so it can be removed later: once an interface disappears from the OS,
-    /// `if_nametoindex` can no longer resolve its name to an index.
-    async fn spawn_interface_watcher(guard: Arc<DropGuard>) {
+    /// `Watchable` pattern used for `local_addrs`. Interface indices come from
+    /// the netdev enumeration itself rather than `if_nametoindex`: the index is
+    /// captured while the interface still exists, and on Windows netdev reports
+    /// adapter GUID names that `if_nametoindex` cannot resolve anyway.
+    ///
+    /// The published set is driven by the discoverer's own confirmations
+    /// (see [`DropGuard::subscribe_multicast_interfaces_v4`]), so it only
+    /// contains interfaces whose sockets actually exist — not requests that
+    /// failed inside the discovery actor.
+    async fn spawn_interface_watcher(
+        guard: Arc<DropGuard>,
+        active_interfaces: Watchable<Vec<MulticastInterface>>,
+    ) {
         let monitor = match netwatch::netmon::Monitor::new().await {
             Ok(monitor) => monitor,
             Err(err) => {
@@ -534,6 +579,9 @@ impl MdnsAddressLookup {
             }
         };
         let mut interface_state = monitor.interface_state();
+        // The discoverer reports back which interface registrations actually
+        // took effect; that set drives `active_interfaces`.
+        let mut confirmed = guard.subscribe_multicast_interfaces_v4();
         // Interfaces we've registered, keyed by name -> interface index.
         let mut known: HashMap<String, u32> = HashMap::new();
 
@@ -541,28 +589,11 @@ impl MdnsAddressLookup {
             let current = v4_multicast_interfaces();
             debug!(?known, ?current, "updating mDNS interfaces");
 
-            // Add interfaces that appeared.
-            for name in &current {
-                // Ignore interfaces we already know about
-                if known.contains_key(name) {
-                    continue;
-                }
-
-                // We don't know about this interface, so we need to add it
-                match if_nametoindex(name) {
-                    Ok(ifindex) => {
-                        debug!(%name, ifindex, "adding multicast interface");
-                        guard.add_interface_v4(ifindex);
-                        known.insert(name.clone(), ifindex);
-                    }
-                    Err(err) => trace!(%name, "could not resolve interface index: {err}"),
-                }
-            }
-
-            // Remove interfaces that disappeared, using the cached index since the
-            // name can no longer be resolved once the interface is gone.
+            // Remove interfaces that disappeared, plus any whose index changed
+            // (interface deleted and recreated under the same name between
+            // wakeups) so the add pass below re-registers the new index.
             known.retain(|name, ifindex| {
-                if current.contains(name) {
+                if current.get(name) == Some(ifindex) {
                     return true;
                 }
                 debug!(%name, ifindex, "removing multicast interface");
@@ -570,14 +601,51 @@ impl MdnsAddressLookup {
                 false
             });
 
-            // Wait for the next network change instead of polling.
-            let updated = interface_state.updated().await;
-            match updated {
-                Ok(state) => debug!(%state, "interface state changed"),
-                Err(e) => {
-                    error!("could not get updated interface state due to error: {e}");
+            // Add interfaces that appeared.
+            for (name, &ifindex) in &current {
+                // Ignore interfaces we already know about
+                if known.contains_key(name) {
+                    continue;
+                }
 
-                    break;
+                debug!(%name, ifindex, "adding multicast interface");
+                guard.add_interface_v4(ifindex);
+                known.insert(name.clone(), ifindex);
+            }
+
+            // Publish the actively advertising set: indices confirmed by the
+            // discoverer, joined with the names we registered them under.
+            // `borrow_and_update` marks the value seen, so a confirmation
+            // arriving after this point wakes the select below.
+            let active: Vec<MulticastInterface> = confirmed
+                .borrow_and_update()
+                .iter()
+                .map(|&index| MulticastInterface {
+                    index,
+                    name: known
+                        .iter()
+                        .find_map(|(name, &idx)| (idx == index).then(|| name.clone())),
+                })
+                .collect();
+            active_interfaces.set(active).ok();
+
+            // Wait for the next network change or discoverer confirmation
+            // instead of polling.
+            tokio::select! {
+                updated = interface_state.updated() => match updated {
+                    Ok(state) => debug!(%state, "interface state changed"),
+                    Err(e) => {
+                        error!("could not get updated interface state due to error: {e}");
+
+                        break;
+                    }
+                },
+                changed = confirmed.changed() => {
+                    if changed.is_err() {
+                        debug!("discoverer stopped, ending interface watcher");
+                        break;
+                    }
+                    debug!("multicast interface confirmations changed");
                 }
             }
         }
@@ -597,7 +665,8 @@ impl MdnsAddressLookup {
     }
 }
 
-/// Returns the names of interfaces suitable for IPv4 mDNS multicast.
+/// Returns name -> OS interface index for interfaces suitable for IPv4 mDNS
+/// multicast.
 ///
 /// We register an interface only if it is up, multicast-capable, has an IPv4
 /// address, and is neither loopback nor point-to-point. Point-to-point links
@@ -605,7 +674,7 @@ impl MdnsAddressLookup {
 /// fail to actually join a group, and sending on every such interface multiplies
 /// the multicast traffic for no benefit. The discoverer only supports
 /// per-interface multicast for IPv4; IPv6 always uses the default interface.
-fn v4_multicast_interfaces() -> HashSet<String> {
+fn v4_multicast_interfaces() -> HashMap<String, u32> {
     netdev::get_interfaces()
         .into_iter()
         .filter(|iface| {
@@ -615,7 +684,7 @@ fn v4_multicast_interfaces() -> HashSet<String> {
                 && !iface.is_point_to_point()
                 && !iface.ipv4.is_empty()
         })
-        .map(|iface| iface.name)
+        .map(|iface| (iface.name, iface.index))
         .collect()
 }
 
@@ -1014,6 +1083,50 @@ mod tests {
             let discovered_relay_urls: Vec<_> = endpoint_info.data.relay_urls().collect();
             assert_eq!(discovered_relay_urls.len(), 1);
             assert_eq!(discovered_relay_urls[0], &relay_url);
+
+            Ok(())
+        }
+
+        #[tokio::test]
+        #[traced_test]
+        async fn mdns_multicast_interfaces_watchable() -> Result {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(7u64);
+            let (_, mdns) = make_address_lookup(&mut rng, true)?;
+
+            // The watchable must converge on the interfaces eligible for
+            // per-interface multicast on this host (may legitimately be
+            // empty, e.g. in minimal containers), with names attached and
+            // sorted by index.
+            let mut expected: Vec<MulticastInterface> = v4_multicast_interfaces()
+                .into_iter()
+                .map(|(name, index)| MulticastInterface {
+                    index,
+                    name: Some(name),
+                })
+                .collect();
+            expected.sort();
+
+            let mut watcher = mdns.multicast_interfaces();
+            let converged = tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    if watcher.get() == expected {
+                        break;
+                    }
+                    if watcher.updated().await.is_err() {
+                        bail_any!("interface watchable disconnected");
+                    }
+                }
+                Ok::<_, Error>(())
+            })
+            .await;
+            match converged {
+                Ok(result) => result?,
+                Err(_) => bail_any!(
+                    "timed out waiting for multicast interface set: last seen {:?}, expected {:?}",
+                    watcher.get(),
+                    expected
+                ),
+            }
 
             Ok(())
         }

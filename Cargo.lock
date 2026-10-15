@@ -302,9 +302,9 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "cfg_aliases"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
+checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 
 [[package]]
 name = "chacha20"
@@ -1641,7 +1641,7 @@ dependencies = [
 [[package]]
 name = "iroh"
 version = "1.0.1"
-source = "git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c#2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c"
+source = "git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a#1516942a452eb5705e2c2df3beb7a73e77d8cd6a"
 dependencies = [
  "backon",
  "blake3",
@@ -1656,17 +1656,17 @@ dependencies = [
  "hickory-resolver",
  "http",
  "ipnet",
- "iroh-base 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c)",
- "iroh-dns 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c)",
+ "iroh-base 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a)",
+ "iroh-dns 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a)",
  "iroh-metrics",
- "iroh-relay 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c)",
+ "iroh-relay 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a)",
  "n0-error",
  "n0-future",
  "n0-watcher",
- "netwatch 0.19.1 (git+https://github.com/saronic-technologies/net-tools?rev=0015d85c818ce15204b31cc464af0a20d064cbb3)",
- "noq 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e)",
- "noq-proto 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e)",
- "noq-udp 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e)",
+ "netwatch 0.19.1 (git+https://github.com/saronic-technologies/net-tools?rev=2b560b994a1f9658d2a71dab343dbb64bf801039)",
+ "noq 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f)",
+ "noq-proto 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f)",
+ "noq-udp 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f)",
  "papaya",
  "pin-project",
  "portable-atomic",
@@ -1710,7 +1710,7 @@ dependencies = [
 [[package]]
 name = "iroh-base"
 version = "1.0.1"
-source = "git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c#2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c"
+source = "git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a#1516942a452eb5705e2c2df3beb7a73e77d8cd6a"
 dependencies = [
  "curve25519-dalek",
  "data-encoding",
@@ -1752,13 +1752,13 @@ dependencies = [
 [[package]]
 name = "iroh-dns"
 version = "1.0.1"
-source = "git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c#2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c"
+source = "git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a#1516942a452eb5705e2c2df3beb7a73e77d8cd6a"
 dependencies = [
  "arc-swap",
  "cfg_aliases",
  "derive_more",
  "hickory-resolver",
- "iroh-base 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c)",
+ "iroh-base 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a)",
  "n0-error",
  "n0-future",
  "ndk-context",
@@ -1798,14 +1798,14 @@ dependencies = [
  "data-encoding",
  "derive_more",
  "futures-util",
- "iroh 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c)",
- "iroh-base 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c)",
+ "iroh 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a)",
+ "iroh-base 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a)",
  "n0-error",
  "n0-future",
  "n0-tracing-test",
  "n0-watcher",
  "netdev",
- "netwatch 0.19.1 (git+https://github.com/saronic-technologies/net-tools?rev=0015d85c818ce15204b31cc464af0a20d064cbb3)",
+ "netwatch 0.19.1 (git+https://github.com/saronic-technologies/net-tools?rev=2b560b994a1f9658d2a71dab343dbb64bf801039)",
  "rand 0.10.1",
  "rand_chacha 0.10.0",
  "swarm-discovery",
@@ -1891,7 +1891,7 @@ dependencies = [
 [[package]]
 name = "iroh-relay"
 version = "1.0.1"
-source = "git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c#2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c"
+source = "git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a#1516942a452eb5705e2c2df3beb7a73e77d8cd6a"
 dependencies = [
  "blake3",
  "bytes",
@@ -1904,14 +1904,14 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "iroh-base 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c)",
- "iroh-dns 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=2a552f06deb0bc72dd79d0eb7fcb4580ba7d788c)",
+ "iroh-base 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a)",
+ "iroh-dns 1.0.1 (git+https://github.com/saronic-technologies/iroh?rev=1516942a452eb5705e2c2df3beb7a73e77d8cd6a)",
  "iroh-metrics",
  "lru",
  "n0-error",
  "n0-future",
- "noq 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e)",
- "noq-proto 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e)",
+ "noq 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f)",
+ "noq-proto 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f)",
  "num_enum",
  "pin-project",
  "postcard",
@@ -2364,7 +2364,7 @@ dependencies = [
 [[package]]
 name = "netwatch"
 version = "0.19.1"
-source = "git+https://github.com/saronic-technologies/net-tools?rev=0015d85c818ce15204b31cc464af0a20d064cbb3#0015d85c818ce15204b31cc464af0a20d064cbb3"
+source = "git+https://github.com/saronic-technologies/net-tools?rev=2b560b994a1f9658d2a71dab343dbb64bf801039#2b560b994a1f9658d2a71dab343dbb64bf801039"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -2381,7 +2381,7 @@ dependencies = [
  "netlink-packet-route",
  "netlink-proto",
  "netlink-sys",
- "noq-udp 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e)",
+ "noq-udp 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f)",
  "objc2-core-foundation",
  "objc2-system-configuration",
  "pin-project-lite",
@@ -2422,13 +2422,13 @@ dependencies = [
 [[package]]
 name = "noq"
 version = "1.0.1"
-source = "git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e#f359116009362c9bada65f10e93f68517619d39e"
+source = "git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f#cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f"
 dependencies = [
  "bytes",
  "cfg_aliases",
  "derive_more",
- "noq-proto 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e)",
- "noq-udp 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e)",
+ "noq-proto 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f)",
+ "noq-udp 1.0.1 (git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f)",
  "pin-project-lite",
  "rustc-hash",
  "rustls",
@@ -2470,7 +2470,7 @@ dependencies = [
 [[package]]
 name = "noq-proto"
 version = "1.0.1"
-source = "git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e#f359116009362c9bada65f10e93f68517619d39e"
+source = "git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f#cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f"
 dependencies = [
  "aes-gcm",
  "bytes",
@@ -2509,7 +2509,7 @@ dependencies = [
 [[package]]
 name = "noq-udp"
 version = "1.0.1"
-source = "git+https://github.com/saronic-technologies/noq?rev=f359116009362c9bada65f10e93f68517619d39e#f359116009362c9bada65f10e93f68517619d39e"
+source = "git+https://github.com/saronic-technologies/noq?rev=cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f#cb4b0abc1fd2fc18c8a43928bfaa8a3733a8523f"
 dependencies = [
  "cfg_aliases",
  "libc",

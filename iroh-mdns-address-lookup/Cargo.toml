@@ -22,20 +22,20 @@ workspace = true
 data-encoding = "2.10"
 derive_more = { version = "2.1", features = ["debug"] }
 futures-util = "0.3"
-iroh = { git = "https://github.com/saronic-technologies/iroh", rev = "1516942a452eb5705e2c2df3beb7a73e77d8cd6a", default-features = false }
-iroh-base = { git = "https://github.com/saronic-technologies/iroh", rev = "1516942a452eb5705e2c2df3beb7a73e77d8cd6a", default-features = false, features = ["key"] }
+iroh = { git = "https://github.com/saronic-technologies/iroh", rev = "d8f8cc4a90998fb1bf73e10f41c4122a06569234", default-features = false }
+iroh-base = { git = "https://github.com/saronic-technologies/iroh", rev = "d8f8cc4a90998fb1bf73e10f41c4122a06569234", default-features = false, features = ["key"] }
 n0-error = "1.0.0"
 n0-future = "0.3.2"
 n0-watcher = "1"
 netdev = "0.45"
-netwatch = { git = "https://github.com/saronic-technologies/net-tools", rev = "2b560b994a1f9658d2a71dab343dbb64bf801039" }
+netwatch = { git = "https://github.com/saronic-technologies/net-tools", rev = "193c03c437eb140b2f9934dcd9e0747a67a32721" }
 swarm-discovery = { git = "https://github.com/saronic-technologies/swarm-discovery", rev = "e88a952ff92583e96f821b8f1f1812e178886f3e" }
 tokio = { version = "1.49", features = ["rt", "sync"] }
 tokio-stream = { version = "0.1.15", features = ["sync"] }
 tracing = "0.1.44"
 
 [dev-dependencies]
-iroh = { git = "https://github.com/saronic-technologies/iroh", rev = "1516942a452eb5705e2c2df3beb7a73e77d8cd6a" }
+iroh = { git = "https://github.com/saronic-technologies/iroh", rev = "d8f8cc4a90998fb1bf73e10f41c4122a06569234" }
 n0-tracing-test = "0.3"
 rand = "0.10"
 rand_chacha = "0.10"
